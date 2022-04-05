@@ -93,8 +93,13 @@ spec:
 
               mc admin service restart {{ $minioAlias }};
 
-              {{- range $user := .Values.provisioning.users }}
-              mc admin user add {{ $minioAlias }} {{ $user.username }} {{ $user.password }};
+              {{- range $idx, $user := .Values.provisioning.users }}
+              {{- $userPassword := default "" $user.password }}
+              {{- if and (hasKey $user "existingSecret") (hasKey $user "existingSecretKey") }}
+              {{- $userPasswordFile := printf "/opt/bitnami/minio/user-secrets/%d/users-password" $idx}}
+              {{- $userPassword = (printf "$(<%s)" $userPasswordFile)}}
+              {{- end }}
+              mc admin user add {{ $minioAlias }} {{ $user.username }} {{ $userPassword | quote }};
               {{- if $user.setPolicies }}
               mc admin policy set {{ $minioAlias }} "{{ join "," $user.policies }}" user={{ $user.username }};
               {{- else }}
@@ -209,6 +214,10 @@ spec:
             - name: minio-certs
               mountPath: {{ default "/certs" .Values.tls.mountPath }}
             {{- end }}
+            {{- range $idx, $user := .Values.provisioning.users }}
+            - name: {{ printf "users-%d-password" $idx }}
+              mountPath: /opt/bitnami/minio/user-secrets/{{ $idx }}/
+            {{- end }}
             {{- if .Values.provisioning.extraVolumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" .Values.provisioning.extraVolumeMounts "context" $) | nindent 12 }}
             {{- end }}
@@ -225,6 +234,16 @@ spec:
         - name: minio-credentials
           secret:
             secretName: {{ include "minio.secretName" . }}
+        {{- end }}
+        {{- range $idx, $user := .Values.provisioning.users }}
+        {{- if and (hasKey $user "existingSecret") (hasKey $user "existingSecretKey") }}
+        - name: {{ printf "users-%d-password" $idx }}
+          secret:
+            secretName: {{ $user.existingSecret }}
+            items:
+              - key: {{ $user.existingSecretKey }}
+                path: "users-password"
+        {{- end }}
         {{- end }}
         {{- if .Values.tls.enabled }}
         - name: minio-certs
