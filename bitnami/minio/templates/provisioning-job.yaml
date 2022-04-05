@@ -215,8 +215,10 @@ spec:
               mountPath: {{ default "/certs" .Values.tls.mountPath }}
             {{- end }}
             {{- range $idx, $user := .Values.provisioning.users }}
+            {{- if and (hasKey $user "existingSecret") (hasKey $user "existingSecretKey") }}
             - name: {{ printf "users-%d-password" $idx }}
               mountPath: /opt/bitnami/minio/user-secrets/{{ $idx }}/
+            {{- end }}
             {{- end }}
             {{- if .Values.provisioning.extraVolumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" .Values.provisioning.extraVolumeMounts "context" $) | nindent 12 }}
